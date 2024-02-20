@@ -2,7 +2,9 @@
 
 **Dusk ITN2 Node Height Tracker**
 
-This is a shell script that checks the node's status every minute and prints it to the console.
+This is a python3 script that checks the node's status every minute and prints it to the console.
+
+Original less featureful bash version still available. Instructions [here](https://github.com/Znomon/Dusk-ITN2-Node-Height-Tracker/blob/main/README_bash.md):
 
 ## Usage
 
