@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Define the intervals in minutes
-intervals=(5 10 30 60)
+# Define the intervals in minutes (including 1 minute)
+intervals=(1 5 10 30 60)
 
 # Function to get the current block height
 get_current_height() {
@@ -12,18 +12,46 @@ get_current_height() {
          jq -r '.block.header.height'
 }
 
-# Initialize an associative array to store historical values
+# Function to get the global block height
+get_global_height() {
+    height=$(curl --silent --max-time 10 'https://api.dusk.network/v1/latest?node=nodes.dusk.network' | jq -r '.data.blocks[0].header.height')
+    if [[ "$height" =~ ^[0-9]+$ ]]; then
+        echo "$height"
+    else
+        echo "failed"
+    fi
+}
+
+# Initialize variables
 declare -A history
+global_height="Unavailable"
+global_height_timestamp=$(date +%s)
 
 # Main loop
 while true; do
     current_height=$(get_current_height)
     current_time=$(date +%s)
 
+    echo "Current Height: $current_height (Time: $(date -d @$current_time))"
+
+    # Try to update global height every 5 minutes
+    if (( current_time - global_height_timestamp >= 300 )); then
+        new_global_height=$(get_global_height)
+        if [[ "$new_global_height" != "failed" ]]; then
+            global_height=$new_global_height
+            global_height_timestamp=$current_time
+        fi
+    fi
+
+    if [[ "$global_height" != "Unavailable" ]]; then
+        age=$((current_time - global_height_timestamp))
+        echo "Global Height: $global_height (Data age: $age seconds)"
+    else
+        echo "Global Height: Unavailable"
+    fi
+
     # Store current height with timestamp
     history[$current_time]=$current_height
-
-    echo "Current Height: $current_height (Time: $(date -d @$current_time))"
 
     # Check for increases over defined intervals
     for interval in "${intervals[@]}"; do
@@ -36,12 +64,17 @@ while true; do
         done
         if [ $closest_time -ne 0 ]; then
             past_height=${history[$closest_time]}
-            increase=$((current_height - past_height))
-            echo "Increase over last $interval minutes: $increase"
+            if [[ $current_height =~ ^[0-9]+$ ]] && [[ $past_height =~ ^[0-9]+$ ]]; then
+                increase=$((current_height - past_height))
+                echo "Increase over last $interval minutes: $increase"
+            else
+                echo "Invalid data for calculation."
+            fi
         else
             echo "No data for full $interval minute interval yet."
         fi
     done
+
 
     echo "-------------------------------------"
 
