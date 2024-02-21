@@ -48,6 +48,7 @@ def format_timedelta(td):
 def main():
     intervals = [1, 5, 15, 30, 60]  # Minutes
     local_heights = {interval: [] for interval in intervals}
+    last_interval_check = {interval: datetime.now() for interval in intervals}
 
     # Get initial local and global heights
     local_height = get_current_local_height()
@@ -58,10 +59,12 @@ def main():
 
         # Update local heights for each interval
         for interval in intervals:
-            if (current_time - last_global_check).total_seconds() >= interval * 60 or (interval in [15, 30, 60] and not local_heights[interval]):
+            time_since_last_interval_check = (current_time - last_interval_check[interval]).total_seconds()
+            if time_since_last_interval_check >= interval * 60 or not local_heights[interval]:
                 local_heights[interval].append(local_height)
                 if len(local_heights[interval]) > 2:
                     local_heights[interval].pop(0)  # Keep only the last two records
+                last_interval_check[interval] = current_time  # Update the last check time for this interval
 
         # Update global height every 5 minutes
         if (current_time - last_global_check).total_seconds() >= 300:
