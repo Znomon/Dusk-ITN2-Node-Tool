@@ -1,6 +1,26 @@
 import requests
 import time
 from datetime import datetime, timedelta
+import subprocess
+
+def count_blocks_mined():
+    # Run the grep command and capture its output
+    grep_process = subprocess.Popen(["grep", "execute_state_transition", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, _ = grep_process.communicate()
+
+    # Count the number of lines returned by the grep command
+    num_lines = len(output.decode().split('\n'))
+
+    # Check if the number of lines increased since the last call
+    if hasattr(count_blocks_mined, 'last_count'):
+        if num_lines > count_blocks_mined.last_count:
+            print("####### BLOCK MINED! #######")
+
+    # Update the last count value
+    count_blocks_mined.last_count = num_lines
+
+    return num_lines
+
 
 def get_current_local_height():
     response = requests.post(
@@ -11,17 +31,17 @@ def get_current_local_height():
     return response.json()['block']['header']['height']
 
 def get_global_height():
-    response = requests.get('https://api.dusk.network/v1/latest?node=nodes.dusk.network', timeout=10)
+    response = requests.get('https://api.dusk.network/v1/latest?node=nodes.dusk.network', timeout=2)
     return response.json()['data']['blocks'][0]['header']['height']
 
-def get_global_height_safe():
+def get_global_height_safe(): #this needs a thread
     while True:
         try:
             global_height = get_global_height()
             return global_height, datetime.now()
         except requests.exceptions.Timeout:
             print("Global node request timed out, retrying...")
-            time.sleep(30)
+            time.sleep(10)
 
 def calculate_block_increase(local_heights, interval, current_height):
     if len(local_heights[interval]) >= 2:
@@ -69,13 +89,18 @@ def main():
         # Update global height every 5 minutes
         if (current_time - last_global_check).total_seconds() >= 300:
             global_height, last_global_check = get_global_height_safe()
+        age = datetime.now() - last_global_check
+        age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
 
         # Update local height for the next iteration
         local_height = get_current_local_height()
 
         # Display results in table format
+        print("-----------------------------")
         print("\nCurrent Local Height:", local_height)
-        print(f"Current Global Height: {global_height} (Age: {format_timedelta(datetime.now() - last_global_check)})")
+        print(f"Current Global Height: {global_height} (Age: {age_text})")
+        print("Blocks Mined:", count_blocks_mined())
+        print("\n-----------------------------")
         print("\nBlock Increase Over Time:")
         print("Interval (min)\tBlocks Increased")
         for interval in intervals:
@@ -94,7 +119,11 @@ def main():
                 break
 
         if estimated_catch_up_time:
-            print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
+            # Check if the estimated catch-up time is negative or zero
+            if estimated_catch_up_time.total_seconds() <= 0:
+                print("\nEstimated Time to Catch Up: SYNCED!")
+            else:
+                print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
 
         time.sleep(60)  # Wait for 1 minute before next check
 
