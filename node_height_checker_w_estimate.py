@@ -52,6 +52,8 @@ def get_global_height_safe(): #this needs a thread
         print("Server Error from Block Explorer, retrying later...")
         #time.sleep(10)
 
+    return None, datetime.now()
+
 def calculate_block_increase(local_heights, interval, current_height):
     if len(local_heights[interval]) >= 2:
         return current_height - local_heights[interval][-2]
@@ -75,22 +77,13 @@ def format_timedelta(td):
     return ", ".join(parts)
 
 def main():
-    intervals = [1, 5, 15, 30, 60]  # Minutesi
-    no_globe = 0
+    intervals = [1, 5, 15, 30, 60]  # Minutes
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
 
-    # Get initial local and global heights
+    # Get initial local height
     local_height = get_current_local_height()
-    try:
-        global_height, last_global_check = get_global_height_safe()
-    except Exception as e:
-        try:
-            global_height > 0
-        except NameError:
-            no_globe = 1
-            last_global_check = datetime.now()
-        print("Block Explorer offline, will try grabbing global height soon")
+    global_height, last_global_check = get_global_height_safe()
 
     while True:
         current_time = datetime.now()
@@ -102,19 +95,7 @@ def main():
                 local_heights[interval].append(local_height)
                 if len(local_heights[interval]) > 2:
                     local_heights[interval].pop(0)  # Keep only the last two records
-                last_interval_check[interval] = current_time  # Update the last check time for this interval
-
-        # Update global height every 5 minutes
-        if (current_time - last_global_check).total_seconds() >= 300:
-            global_height, last_global_check = get_global_height_safe()
-
-        if(no_globe == 0):
-            age = datetime.now() - last_global_check
-            age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
-        else:
-            age_text = "Block Explorer Timeout"
-            global_height = "Unknown"
-
+                last_interval_check[interval] = current_time
 
         # Update local height for the next iteration
         local_height = get_current_local_height()
@@ -122,7 +103,6 @@ def main():
         # Display results in table format
         print("-----------------------------")
         print("\nCurrent Local Height:", local_height)
-        print(f"Current Global Height: {global_height} (Age: {age_text})")
         print("Blocks Mined:", count_blocks_mined())
         print("\n-----------------------------")
         print("\nBlock Increase Over Time:")
@@ -131,8 +111,15 @@ def main():
             blocks_increased = calculate_block_increase(local_heights, interval, local_height)
             print(f"{interval}\t\t{blocks_increased}")
 
+        # Update and handle global height information
+        if (current_time - last_global_check).total_seconds() >= 300:
+            global_height, last_global_check = get_global_height_safe()
 
-        if(no_globe == 0):
+        if global_height is not None:
+            age = datetime.now() - last_global_check
+            age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
+            print(f"Current Global Height: {global_height} (Age: {age_text})")
+
             # Calculate estimated catch-up time using the largest available interval
             estimated_catch_up_time = None
             for interval in reversed(intervals):
@@ -151,8 +138,10 @@ def main():
                 else:
                     print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
 
+        else:
+            print("Global height data is unavailable. Skipping related calculations.")
+
         time.sleep(60)  # Wait for 1 minute before next check
 
 if __name__ == "__main__":
     main()
-
