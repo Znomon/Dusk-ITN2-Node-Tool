@@ -58,7 +58,7 @@ def main():
 
         # Update local heights for each interval
         for interval in intervals:
-            if (current_time - last_global_check).total_seconds() >= interval * 60 or not local_heights[interval]:
+            if (current_time - last_global_check).total_seconds() >= interval * 60 or (interval in [15, 30, 60] and not local_heights[interval]):
                 local_heights[interval].append(local_height)
                 if len(local_heights[interval]) > 2:
                     local_heights[interval].pop(0)  # Keep only the last two records
