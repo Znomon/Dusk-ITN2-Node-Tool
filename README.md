@@ -14,6 +14,11 @@ Original less featureful bash version still available. Instructions [here](https
     ```bash
     python3 node_height_checker_w_estimate.py
     ```
+## One-Liner
+
+```bash
+curl https://raw.githubusercontent.com/Znomon/Dusk-ITN2-Node-Height-Tracker/main/node_height_checker_w_estimate.py | python3
+```
 
 ## Output Example
 
