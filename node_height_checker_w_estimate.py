@@ -100,10 +100,26 @@ def main():
         # Update local height for the next iteration
         local_height = get_current_local_height()
 
-        # Display results in table format
+        # Display local height
         print("-----------------------------")
         print("\nCurrent Local Height:", local_height)
+
+        # Update and handle global height information
+        if (current_time - last_global_check).total_seconds() >= 300:
+            global_height, last_global_check = get_global_height_safe()
+
+        # Display global height
+        if global_height is not None:
+            age = datetime.now() - last_global_check
+            age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
+            print(f"Current Global Height: {global_height} (Age: {age_text})")
+        else:
+            print("Current Global Height: Unavailable")
+
+        # Display blocks mined
         print("Blocks Mined:", count_blocks_mined())
+
+        # Display interval block increase information
         print("\n-----------------------------")
         print("\nBlock Increase Over Time:")
         print("Interval (min)\tBlocks Increased")
@@ -111,15 +127,7 @@ def main():
             blocks_increased = calculate_block_increase(local_heights, interval, local_height)
             print(f"{interval}\t\t{blocks_increased}")
 
-        # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 300:
-            global_height, last_global_check = get_global_height_safe()
-
         if global_height is not None:
-            age = datetime.now() - last_global_check
-            age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
-            print(f"Current Global Height: {global_height} (Age: {age_text})")
-
             # Calculate estimated catch-up time using the largest available interval
             estimated_catch_up_time = None
             for interval in reversed(intervals):
@@ -137,9 +145,6 @@ def main():
                     print("\nEstimated Time to Catch Up: SYNCED!")
                 else:
                     print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
-
-        else:
-            print("Global height data is unavailable. Skipping related calculations.")
 
         time.sleep(60)  # Wait for 1 minute before next check
 
