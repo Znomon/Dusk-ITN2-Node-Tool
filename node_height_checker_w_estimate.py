@@ -2,6 +2,7 @@ import requests
 import time
 from datetime import datetime, timedelta
 import subprocess
+import json
 
 def count_blocks_mined():
     # Run the grep command and capture its output
@@ -9,7 +10,7 @@ def count_blocks_mined():
     output, _ = grep_process.communicate()
 
     # Count the number of lines returned by the grep command
-    num_lines = len(output.decode().split('\n'))
+    num_lines = len(output.decode().split('\n')) - 1
 
     # Check if the number of lines increased since the last call
     if hasattr(count_blocks_mined, 'last_count'):
@@ -32,16 +33,24 @@ def get_current_local_height():
 
 def get_global_height():
     response = requests.get('https://api.dusk.network/v1/latest?node=nodes.dusk.network', timeout=2)
-    return response.json()['data']['blocks'][0]['header']['height']
+    data = response.json()
+    # Check if 'data' key exists in the response
+    if 'data' in data and 'blocks' in data['data'] and len(data['data']['blocks']) > 0:
+        return data['data']['blocks'][0]['header']['height']
+    else:
+        # Handle the absence of 'data' or 'blocks' key
+        raise KeyError("Key 'data' or 'blocks' not found in the response")
 
 def get_global_height_safe(): #this needs a thread
-    while True:
-        try:
-            global_height = get_global_height()
-            return global_height, datetime.now()
-        except requests.exceptions.Timeout:
-            print("Global node request timed out, retrying...")
-            time.sleep(10)
+    try:
+        global_height = get_global_height()
+        return global_height, datetime.now()
+    except requests.exceptions.Timeout:
+        print("Block Explorer timed out, retrying...")
+        #time.sleep(10)
+    except KeyError as e:
+        print("Server Error from Block Explorer, retrying later...")
+        #time.sleep(10)
 
 def calculate_block_increase(local_heights, interval, current_height):
     if len(local_heights[interval]) >= 2:
@@ -66,13 +75,22 @@ def format_timedelta(td):
     return ", ".join(parts)
 
 def main():
-    intervals = [1, 5, 15, 30, 60]  # Minutes
+    intervals = [1, 5, 15, 30, 60]  # Minutesi
+    no_globe = 0
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
 
     # Get initial local and global heights
     local_height = get_current_local_height()
-    global_height, last_global_check = get_global_height_safe()
+    try:
+        global_height, last_global_check = get_global_height_safe()
+    except Exception as e:
+        try:
+            global_height > 0
+        except NameError:
+            no_globe = 1
+            last_global_check = datetime.now()
+        print("Block Explorer offline, will try grabbing global height soon")
 
     while True:
         current_time = datetime.now()
@@ -89,8 +107,14 @@ def main():
         # Update global height every 5 minutes
         if (current_time - last_global_check).total_seconds() >= 300:
             global_height, last_global_check = get_global_height_safe()
-        age = datetime.now() - last_global_check
-        age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
+
+        if(no_globe == 0):
+            age = datetime.now() - last_global_check
+            age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
+        else:
+            age_text = "Block Explorer Timeout"
+            global_height = "Unknown"
+
 
         # Update local height for the next iteration
         local_height = get_current_local_height()
@@ -107,25 +131,28 @@ def main():
             blocks_increased = calculate_block_increase(local_heights, interval, local_height)
             print(f"{interval}\t\t{blocks_increased}")
 
-        # Calculate estimated catch-up time using the largest available interval
-        estimated_catch_up_time = None
-        for interval in reversed(intervals):
-            blocks_behind = global_height - local_height
-            blocks_per_interval = calculate_block_increase(local_heights, interval, local_height)
-            if blocks_per_interval > 0:
-                time_per_block = interval * 60 / blocks_per_interval
-                total_time_seconds = time_per_block * blocks_behind
-                estimated_catch_up_time = timedelta(seconds=total_time_seconds)
-                break
 
-        if estimated_catch_up_time:
-            # Check if the estimated catch-up time is negative or zero
-            if estimated_catch_up_time.total_seconds() <= 0:
-                print("\nEstimated Time to Catch Up: SYNCED!")
-            else:
-                print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
+        if(no_globe == 0):
+            # Calculate estimated catch-up time using the largest available interval
+            estimated_catch_up_time = None
+            for interval in reversed(intervals):
+                blocks_behind = global_height - local_height
+                blocks_per_interval = calculate_block_increase(local_heights, interval, local_height)
+                if blocks_per_interval > 0:
+                    time_per_block = interval * 60 / blocks_per_interval
+                    total_time_seconds = time_per_block * blocks_behind
+                    estimated_catch_up_time = timedelta(seconds=total_time_seconds)
+                    break
+
+            if estimated_catch_up_time:
+                # Check if the estimated catch-up time is negative or zero
+                if estimated_catch_up_time.total_seconds() <= 0:
+                    print("\nEstimated Time to Catch Up: SYNCED!")
+                else:
+                    print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
 
         time.sleep(60)  # Wait for 1 minute before next check
 
 if __name__ == "__main__":
     main()
+
