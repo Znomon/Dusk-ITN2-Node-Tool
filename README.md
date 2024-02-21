@@ -27,9 +27,9 @@ Current Global Height: 79989 (Age: 4 minutes)
 Block Increase Over Time:
 Interval (min)  Blocks Increased
 1               139
-5               941
-15              0
-30              0
+5               641
+15              983
+30              1602
 60              0
 
 Estimated Time to Catch Up: 6 minutes, 4 seconds
