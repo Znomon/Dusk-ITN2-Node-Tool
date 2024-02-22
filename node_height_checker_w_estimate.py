@@ -39,7 +39,7 @@ def check_consensus_keys_password():
 
 def dusk_network_connect_status():
     # Run the tail command to get the last 500 lines of the log file
-    tail_process = subprocess.Popen(["tail", "-n", "500", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    tail_process = subprocess.Popen(["tail", "-n", "50", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, _ = tail_process.communicate()
 
     # Check for the string "block received" in the output
