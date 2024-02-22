@@ -105,12 +105,15 @@ def dusk_network_connect_status():
     print(f"DUSK Network Status: {status}")
 
 def get_current_local_height():
-    response = requests.post(
-        'http://127.0.0.1:8080/02/Chain',
-        headers={'Rusk-Version': '0.7.0-rc', 'Content-Type': 'application/json'},
-        json={"topic": "gql", "data": "query { block(height: -1) { header { height } } }"}
-    )
-    return response.json()['block']['header']['height']
+    try:
+        response = requests.post(
+            'http://127.0.0.1:8080/02/Chain',
+            headers={'Rusk-Version': '0.7.0-rc', 'Content-Type': 'application/json'},
+            json={"topic": "gql", "data": "query { block(height: -1) { header { height } } }"}
+        )
+        return response.json()['block']['header']['height']
+    except Exception:
+        return None
 
 #def get_global_height():
 #    response = requests.get('https://api.dusk.network/v1/latest?node=nodes.dusk.network', timeout=2)
@@ -201,6 +204,9 @@ def format_timedelta(td):
 
     return ", ".join(parts)
 
+def localNodeErrorMsg():
+     print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
+
 def main():
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
@@ -209,6 +215,10 @@ def main():
 
     # Get initial local height
     local_height = get_current_local_height()
+    if local_height is None:
+        localNodeErrorMsg()
+        return
+
     global_height, last_global_check = get_global_height_safe()
 
     check_consensus_keys_password()
@@ -227,6 +237,11 @@ def main():
 
         # Update local height for the next iteration
         local_height = get_current_local_height()
+        if local_height is None:
+            localNodeErrorMsg()
+            sleep(60)
+            continue
+
 
         # Display local height
         print("-----------------------------")
@@ -263,12 +278,6 @@ def main():
 
         print("-----------------------------")
 
-
-        block_accepted_counts = count_block_accepted(log_file_path, intervals)
-        for interval, count in block_accepted_counts.items():
-            print(f"Blocks 'accepted' in the last {interval} minutes: {count}")
-
-
         if estimated_catch_up_time:
             print("Node Status: Syncing... Estimated time to catch up to global:", format_timedelta(estimated_catch_up_time))
 
@@ -277,6 +286,11 @@ def main():
             for interval in intervals:
                 blocks_increased = calculate_block_increase(local_heights, interval, local_height)
                 print(f"{interval}\t\t{blocks_increased}")
+        else:
+            block_accepted_counts = count_block_accepted(log_file_path, intervals)
+            for interval, count in block_accepted_counts.items():
+                print(f"Blocks 'accepted' in the last {interval} minutes: {count}")
+
 
         print("\nPress Ctrl+C to kill")
 
