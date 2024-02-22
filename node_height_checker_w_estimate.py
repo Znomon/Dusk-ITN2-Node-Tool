@@ -22,6 +22,21 @@ def count_blocks_mined():
 
     return num_lines
 
+def check_consensus_keys_password():
+    # Define the number of lines to check at the end of the log file
+    num_lines_to_check = 2000
+
+    # Run the tail command to get the last 2000 lines of the log file
+    tail_process = subprocess.Popen(["tail", "-n", str(num_lines_to_check), "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, _ = tail_process.communicate()
+
+    # Convert the output from bytes to a string
+    log_data = output.decode()
+
+    # Check for the specific error message in the log data
+    if "Invalid consensus keys password: BlockModeError" in log_data:
+        print("ERROR: Invalid consensus keys password detected. Please ensure you have entered the correct password. Refer to the steps on the website (https://docs.dusk.network/itn/node-running-guide/) for guidance.")
+
 
 def get_current_local_height():
     response = requests.post(
@@ -84,6 +99,8 @@ def main():
     # Get initial local height
     local_height = get_current_local_height()
     global_height, last_global_check = get_global_height_safe()
+
+    check_consensus_keys_password()
 
     while True:
         current_time = datetime.now()
