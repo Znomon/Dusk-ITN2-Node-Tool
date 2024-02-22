@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import subprocess
 import json
 import re
+import os
 
 last_known_global_height_info = (None, datetime.min)
 
@@ -24,6 +25,32 @@ def count_blocks_mined():
     count_blocks_mined.last_count = num_lines
 
     return num_lines
+
+def count_alive_nodes():
+    # Define the curl command
+    curl_command = [
+        "curl",
+        "--location",
+        "--request", "GET",
+        "'http://127.0.0.1:8080/02/Chain'",
+        "--header", "'Rusk-Version: 0.7'",
+        "--data-raw", "'{\"topic\": \"alive_nodes\", \"data\": \" 100\"}'"
+    ]
+
+    # Execute the curl command
+    process = subprocess.Popen(curl_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = process.communicate()
+
+    # Return 0 if there's an error
+    if error:
+        return 0
+
+    # Parse the JSON response and return the count of nodes
+    try:
+        nodes_list = json.loads(output.decode())
+        return len(nodes_list)
+    except json.JSONDecodeError:
+        return 0
 
 def check_consensus_keys_password():
     # Define the number of lines to check at the end of the log file
@@ -115,72 +142,42 @@ def get_current_local_height():
     except Exception:
         return None
 
-#def get_global_height():
-#    response = requests.get('https://api.dusk.network/v1/latest?node=nodes.dusk.network', timeout=2)
-#    data = response.json()
-#    # Check if 'data' key exists in the response
-#    if 'data' in data and 'blocks' in data['data'] and len(data['data']['blocks']) > 0:
-#        return data['data']['blocks'][0]['header']['height']
-#    else:
-#        # Handle the absence of 'data' or 'blocks' key
-#        raise KeyError("Key 'data' or 'blocks' not found in the response")
-
-def get_global_height():
-    response = requests.get('https://api.dusk.network/v1/stats?node=nodes.dusk.network', timeout=2)
-    data = response.json()
-    # Check if 'lastBlock' key exists in the response
-    if 'lastBlock' in data:
-        return data['lastBlock']
-    else:
-        # Handle the absence of 'lastBlock' key
-        raise KeyError("Key 'lastBlock' not found in the response")
-
-#def get_global_height_safe():
-#    global last_known_global_height_info
-#    try:
-#        global_height = get_global_height()
-#        last_known_global_height_info = (global_height, datetime.now())
-#        return last_known_global_height_info
-#    except requests.exceptions.Timeout:
-#        print("Block Explorer timed out, retrying...")
-#        # Return the last known info if available, otherwise return None and current time
-#        if last_known_global_height_info[0] is not None:
-#            return last_known_global_height_info
-#        else:
-#            return None, datetime.now()
-#    except KeyError as e:
-#        print("Server Error from Block Explorer, retrying later...")
-#        if last_known_global_height_info[0] is not None:
-#            return last_known_global_height_info
-#        else:
-#            return None, datetime.now()
+def get_local_node_height():
+    try:
+        response = requests.post(
+            'http://127.0.0.1:8080/02/Chain',
+            headers={'Rusk-Version': '0.7', 'Content-Type': 'application/json'},
+            json={"topic": "gql", "data": "query { block(height: -1) {header {height, timestamp}}}"}
+        )
+        data = response.json()
+        if 'block' in data and 'header' in data['block'] and 'height' in data['block']['header']:
+            return data['block']['header']['height']
+        else:
+            raise KeyError("Required keys not found in the response")
+    except Exception:
+        return -1
 
 def get_global_height_safe(max_retries=3, retry_delay=2):
     global last_known_global_height_info
     retries = 0
 
     while retries < max_retries:
-        try:
-            global_height = get_global_height()
-            last_known_global_height_info = (global_height, datetime.now())
+        local_height = get_local_node_height()
+        if local_height != -1:
+            last_known_global_height_info = (local_height, datetime.now())
             return last_known_global_height_info
-        except requests.exceptions.Timeout:
-            #print("Block Explorer timed out, retrying...")
-            time.sleep(retry_delay)  # Wait for some time before retrying
-        except requests.exceptions.RequestException as e:
-            #print(f"Network error: {e}")
-            break  # Break out of the loop for non-timeout errors
-        except KeyError:
-            #print("Server Error from Block Explorer, retrying later...")
-            break
+        else:
+            time.sleep(retry_delay)
 
         retries += 1
 
-    # Return the last known info if available, or None and current time
     if last_known_global_height_info[0] is not None:
         return last_known_global_height_info
     else:
         return None, datetime.now()
+
+def clear_terminal():
+        os.system('clear')
 
 def calculate_block_increase(local_heights, interval, current_height):
     if len(local_heights[interval]) >= 2:
@@ -245,12 +242,13 @@ def main():
 
 
         # Display local height
+        clear_terminal()
         print("-----------------------------")
         print("Current Local Height:", local_height)
 
         # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 300:
-            global_height, last_global_check = get_global_height_safe()
+        #if (current_time - last_global_check).total_seconds() >= 300:
+        global_height, last_global_check = get_global_height_safe()
 
         # Display global height
         if global_height is not None:
@@ -295,7 +293,7 @@ def main():
 
         print("\nPress Ctrl+C to kill")
 
-        time.sleep(60)  # Wait for 1 minute before next check
+        time.sleep(10)  # Wait for 1 minute before next check
 
 if __name__ == "__main__":
     main()
