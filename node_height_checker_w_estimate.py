@@ -5,7 +5,7 @@ import subprocess
 import json
 import re
 
-last_known_global_height = (None, datetime.min)
+last_known_global_height_info = (None, datetime.min)
 
 def count_blocks_mined():
     # Run the grep command and capture its output
@@ -212,6 +212,7 @@ def main():
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
+    estimated_catch_up_time = None
 
     # Get initial local height
     local_height = get_current_local_height()
