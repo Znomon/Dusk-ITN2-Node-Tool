@@ -39,14 +39,14 @@ def check_consensus_keys_password():
 
 def dusk_network_connect_status():
     # Run the tail command to get the last 500 lines of the log file
-    tail_process = subprocess.Popen(["tail", "-n", "50", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    tail_process = subprocess.Popen(["tail", "-n", "200", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, _ = tail_process.communicate()
 
     # Check for the string "block received" in the output
     if "block received" in output.decode():
-        status = "Connected"
+        status = "Connected: Receiving Blocks"
     else:
-        status = "NOT Connected"
+        status = "Not Connected: Network Congested or Node Offline. check #announcements on discord"
 
     print(f"DUSK Network Status: {status}")
 
