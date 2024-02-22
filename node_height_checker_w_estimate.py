@@ -147,10 +147,9 @@ def main():
 
         # Display blocks mined
         print("Blocks Mined:", count_blocks_mined())
-
+        dusk_network_connect_status()
         # Display interval block increase information
         print("\n-----------------------------")
-        dusk_network_connect_status()
         print("\nBlocks seen per 'X' minutes:")
         print("Interval (min)\tBlocks Increased")
         for interval in intervals:
