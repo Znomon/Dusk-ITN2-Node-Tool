@@ -175,6 +175,8 @@ def main():
                 else:
                     print("\nEstimated Time to Catch Up:", format_timedelta(estimated_catch_up_time))
 
+        print("Press Ctrl+C to kill")
+
         time.sleep(60)  # Wait for 1 minute before next check
 
 if __name__ == "__main__":
