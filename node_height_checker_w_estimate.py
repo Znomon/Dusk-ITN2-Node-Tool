@@ -260,7 +260,7 @@ def main():
             estimated_catch_up_time = None
             for interval in reversed(intervals):
                 blocks_behind = global_height - local_height
-                if blocks_behind < 0:
+                if blocks_behind <= 0:
                     print("Node Status: SYNCED!")
                     # Display blocks mined
                     print("Blocks Mined:", count_blocks_mined())
@@ -279,9 +279,9 @@ def main():
         print("-----------------------------")
 
         if estimated_catch_up_time:
-            print("Node Status: Syncing... Estimated time to catch up to global:", format_timedelta(estimated_catch_up_time))
+            print("Node Status: Syncing... \nEstimated time to catch up to global:", format_timedelta(estimated_catch_up_time))
 
-            print("\nSync Status only: Blocks processed per 'X' minutes:")
+            print("\n Blocks synced per 'X' minutes:")
             print("Interval (min)\tBlocks Increased")
             for interval in intervals:
                 blocks_increased = calculate_block_increase(local_heights, interval, local_height)
