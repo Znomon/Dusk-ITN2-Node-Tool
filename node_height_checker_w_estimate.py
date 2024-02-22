@@ -141,9 +141,9 @@ def main():
         if global_height is not None:
             age = datetime.now() - last_global_check
             age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
-            print(f"Current Global Height: {global_height} (Age: {age_text})")
+            print(f"Estimated Global Height: {global_height} (Age: {age_text})")
         else:
-            print("Current Global Height: Unavailable")
+            print("Estimated Global Height: Unavailable")
 
         # Display blocks mined
         print("Blocks Mined:", count_blocks_mined())
