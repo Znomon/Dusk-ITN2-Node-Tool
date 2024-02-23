@@ -143,6 +143,16 @@ def get_current_local_height():
     except Exception:
         return None
 
+def get_global_height():
+    response = requests.get('https://api.dusk.network/v1/stats?node=nodes.dusk.network', timeout=2)
+    data = response.json()
+    # Check if 'lastBlock' key exists in the response
+    if 'lastBlock' in data:
+        return data['lastBlock']
+    else:
+        # Handle the absence of 'lastBlock' key
+        raise KeyError("Key 'lastBlock' not found in the response")
+
 def get_local_node_height():
     try:
         response = requests.post(
@@ -163,7 +173,7 @@ def get_global_height_safe(max_retries=3, retry_delay=2):
     retries = 0
 
     while retries < max_retries:
-        local_height = get_local_node_height()
+        local_height = get_global_height()
         if local_height != -1:
             last_known_global_height_info = (local_height, datetime.now())
             return last_known_global_height_info
@@ -248,8 +258,8 @@ def main():
         print("Current Local Height:", local_height)
 
         # Update and handle global height information
-        #if (current_time - last_global_check).total_seconds() >= 300:
-        global_height, last_global_check = get_global_height_safe()
+        if (current_time - last_global_check).total_seconds() >= 600:
+            global_height, last_global_check = get_global_height_safe()
 
         # Display global height
         if global_height is not None:
