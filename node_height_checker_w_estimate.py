@@ -238,7 +238,7 @@ def main():
         local_height = get_current_local_height()
         if local_height is None:
             localNodeErrorMsg()
-            sleep(60)
+            time.sleep(10)
             continue
 
 
