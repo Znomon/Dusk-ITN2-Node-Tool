@@ -47,26 +47,46 @@ def count_alive_nodes():
         return -1
 
 def find_most_recent_execution_timestamp():
-    lines_to_read = 8000  # Define how many lines you want to read from the end of the file
-
-    # Command to read the last 'lines_to_read' lines and grep for 'execute_state_transition'
+    lines_to_read = 8000
     command = f"tail -n {lines_to_read} /var/log/rusk.log | grep -i 'execute_state_transition'"
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     output, _ = process.communicate()
     lines = output.decode().splitlines()
 
+    # Use a static variable to hold the most recent timestamp
+    if not hasattr(find_most_recent_execution_timestamp, 'most_recent_timestamp'):
+        find_most_recent_execution_timestamp.most_recent_timestamp = None
+
+    for line in lines:
+        line = remove_ansi_codes(line)
+        timestamp = parse_timestamp(line)
+        if timestamp:
+            if find_most_recent_execution_timestamp.most_recent_timestamp is None or timestamp > find_most_recent_execution_timestamp.most_recent_timestamp:
+                find_most_recent_execution_timestamp.most_recent_timestamp = timestamp
+
+    return find_most_recent_execution_timestamp.most_recent_timestamp
+
+def count_mined_blocks_and_get_last_timestamp(log_file_path):
+    search_string = "execute_state_transition"
+
+    # Command to grep for 'execute_state_transition' in the entire log file
+    command = f"grep -i '{search_string}' {log_file_path}"
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    output, _ = process.communicate()
+    lines = output.decode().splitlines()
+
+    num_lines = len(lines)
     most_recent_timestamp = None
 
     # Iterate through each line to find the most recent timestamp
     for line in lines:
         line = remove_ansi_codes(line)
         timestamp = parse_timestamp(line)
-        if timestamp:
-            # Update the most recent timestamp if this timestamp is newer
-            if most_recent_timestamp is None or timestamp > most_recent_timestamp:
-                most_recent_timestamp = timestamp
+        if timestamp and (most_recent_timestamp is None or timestamp > most_recent_timestamp):
+            most_recent_timestamp = timestamp
 
-    return most_recent_timestamp
+    # Return the count of mined blocks and the most recent timestamp
+    return num_lines, most_recent_timestamp
 
 def check_consensus_keys_password():
     # Define the number of lines to check at the end of the log file
@@ -82,6 +102,27 @@ def check_consensus_keys_password():
     # Check for the specific error message in the log data
     if "Invalid consensus keys password: BlockModeError" in log_data:
         print("ERROR: Invalid consensus keys password detected. Please ensure you have entered the correct password. Refer to the steps on the website (https://docs.dusk.network/itn/node-running-guide/) for guidance.")
+
+def estimate_catch_up_time(global_height, local_height, log_file_path, intervals):
+    block_accepted_counts, oldest_timestamp = count_block_accepted(log_file_path, intervals)
+
+    # Use the largest interval for catch-up estimation
+    largest_interval = max(intervals)
+    blocks_accepted = block_accepted_counts[largest_interval]
+
+    # Calculate average block time
+    if blocks_accepted > 0 and oldest_timestamp:
+        time_span = datetime.now(timezone.utc) - oldest_timestamp
+        average_block_time = time_span.total_seconds() / blocks_accepted
+    else:
+        return None  # Not enough data to estimate
+
+    # Calculate catch-up time
+    blocks_behind = global_height - local_height
+    catch_up_seconds = average_block_time * blocks_behind
+    catch_up_time = timedelta(seconds=catch_up_seconds)
+
+    return format_timedelta(catch_up_time)
 
 def remove_ansi_codes(text):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -106,7 +147,7 @@ def parse_timestamp(line):
 def count_block_accepted(log_file_path, intervals):
     current_time = datetime.now(timezone.utc)
     counters = {interval: 0 for interval in intervals}
-    lines_to_read = 8000  # Read the last 50,000 lines
+    lines_to_read = 8000
 
     command = f"tail -n {lines_to_read} {log_file_path} | grep -i 'block accepted'"
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -115,24 +156,17 @@ def count_block_accepted(log_file_path, intervals):
 
     oldest_timestamp = None
 
-    # Update the for loop to track the oldest timestamp
     for line in lines:
         line = remove_ansi_codes(line)
         timestamp = parse_timestamp(line)
         if timestamp:
-            # Update the oldest timestamp
             if oldest_timestamp is None or timestamp < oldest_timestamp:
                 oldest_timestamp = timestamp
             for interval in intervals:
                 if current_time - timestamp <= timedelta(minutes=interval):
                     counters[interval] += 1
 
-    # After the for loop, print the oldest timestamp
-    if 0:
-        if oldest_timestamp:
-            print(f"Oldest timestamp in the log: {oldest_timestamp.isoformat()}")
-
-    return counters
+    return counters, oldest_timestamp
 
 def dusk_network_connect_status():
     # Run the tail command to get the last 500 lines of the log file
@@ -232,8 +266,9 @@ def format_timedelta(td):
         parts.append(f"{hours} hours")
     if minutes:
         parts.append(f"{minutes} minutes")
-    if seconds:
-        parts.append(f"{seconds} seconds")
+    if seconds > 0 and minutes == 0 and hours == 0 and days == 0:
+        parts.append("<1 minute")
+
 
     return ", ".join(parts)
 
@@ -245,7 +280,6 @@ def main():
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
-    estimated_catch_up_time = None
 
     # Get initial local height
     local_height = get_current_local_height()
@@ -254,91 +288,76 @@ def main():
         return
 
     global_height, last_global_check = get_global_height_safe()
-
     check_consensus_keys_password()
 
     while True:
         current_time = datetime.now()
+        clear_terminal()
+        print("-----------------------------")
 
-        # Update local heights for each interval
-        for interval in intervals:
-            time_since_last_interval_check = (current_time - last_interval_check[interval]).total_seconds()
-            if time_since_last_interval_check >= interval * 60 or not local_heights[interval]:
-                local_heights[interval].append(local_height)
-                if len(local_heights[interval]) > 2:
-                    local_heights[interval].pop(0)  # Keep only the last two records
-                last_interval_check[interval] = current_time
-
-        # Update local height for the next iteration
+        # Update local height
         local_height = get_current_local_height()
         if local_height is None:
             localNodeErrorMsg()
             time.sleep(10)
             continue
 
-
         # Display local height
-        clear_terminal()
-        print("-----------------------------")
-        print("Current Local Height:", local_height)
+        print("Your Local Node Block Height:", local_height)
 
         # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 1500: #25 minute timeout 
+        if (current_time - last_global_check).total_seconds() >= 2700: #45 minute timeout
             global_height, last_global_check = get_global_height_safe()
+
+        if 0: #debug
+            global_height = 125000
 
         # Display global height
         if global_height is not None:
             age = datetime.now() - last_global_check
             age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
-            print(f"Estimated Global Height: {global_height} (Age: {age_text})")
-            # Calculate estimated catch-up time using the largest available interval
-            estimated_catch_up_time = None
-            for interval in reversed(intervals):
-                blocks_behind = global_height - local_height
-                if blocks_behind <= 0:
-                    print("Node Status: SYNCED!")
-                    # Display blocks mined
-                    break
-                blocks_per_interval = calculate_block_increase(local_heights, interval, local_height)
-                if blocks_per_interval > 0:
-                    time_per_block = interval * 60 / blocks_per_interval
-                    total_time_seconds = time_per_block * blocks_behind
-                    estimated_catch_up_time = timedelta(seconds=total_time_seconds)
-                    break
-        else:
-            print("Estimated Global Height: Unavailable")
+            print(f"Estimated Global Block Height: {global_height} (Age: {age_text})")
 
-        execute_state_transition_timestamp = find_most_recent_execution_timestamp()
-        if execute_state_transition_timestamp:
-            current_time = datetime.now(timezone.utc)
-            time_diff = current_time - execute_state_transition_timestamp
-            human_readable_time = format_timedelta(time_diff)
-            print(f"Recently Mined Blocks: {count_blocks_mined()} (Last mined {human_readable_time} ago) ")
+            # Determine node status: SYNCED or SYNCING
+            if local_height >= global_height:
+                print("Node Status: SYNCED!")
+            else:
+                # Calculate estimated catch-up time using count_block_accepted
+                estimated_catch_up_time = estimate_catch_up_time(global_height, local_height, log_file_path, intervals)
+                if estimated_catch_up_time:
+                    print(f"Node Status: Syncing. (ETA to Global: {estimated_catch_up_time})")
         else:
-            print(f"Recently Mined Blocks: {count_blocks_mined()}")
+            print("Estimated Global Block Height: Unavailable at this time")
+
+        # Create a separate UTC current time variable for log file processing
+        log_current_time = datetime.now(timezone.utc)
+
+        # Display information about recently mined blocks
+        mined_blocks_count, last_mined_timestamp = count_mined_blocks_and_get_last_timestamp(log_file_path)
+        if last_mined_timestamp:
+            # Ensure last_mined_timestamp is timezone-aware in UTC
+            if last_mined_timestamp.tzinfo is None:
+                last_mined_timestamp = last_mined_timestamp.replace(tzinfo=timezone.utc)
+
+            time_diff = log_current_time - last_mined_timestamp
+            human_readable_time = format_timedelta(time_diff)
+            print(f"Recently Mined Blocks: {mined_blocks_count} (Last mined {human_readable_time} ago)")
+        else:
+            print(f"Recently Mined Blocks: {mined_blocks_count}")
 
 
         dusk_network_connect_status()
 
         print("-----------------------------")
 
-        if estimated_catch_up_time:
-            print("Node Status: Syncing... \nEstimated time to catch up to global:", format_timedelta(estimated_catch_up_time))
-
-            print("\n Blocks synced per 'X' minutes:")
-            print("Interval (min)\tBlocks Increased")
-            for interval in intervals:
-                blocks_increased = calculate_block_increase(local_heights, interval, local_height)
-                print(f"{interval}\t\t{blocks_increased}")
-        else:
-            block_accepted_counts = count_block_accepted(log_file_path, intervals)
-            for interval, count in block_accepted_counts.items():
-                print(f"Blocks 'accepted' in the last {interval} minutes: {count}")
-
+        # Display block accepted information
+        block_accepted_counts = count_block_accepted(log_file_path, intervals)[0]
+        for interval in intervals:
+            print(f"Blocks 'accepted' in the last {interval} minutes: {block_accepted_counts[interval]}")
 
         print("\nPress Ctrl+C to kill")
-
-        time.sleep(10)  # Wait for 1 minute before next check
+        time.sleep(10)  # Wait for 10 seconds before next check
 
 if __name__ == "__main__":
     main()
+
