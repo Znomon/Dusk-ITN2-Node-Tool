@@ -228,21 +228,38 @@ def get_local_node_height():
         return -1
 
 def get_global_height_safe(max_retries=2, retry_delay=2):
-    global last_known_global_height_info
-    retries = 0
+    data_file = os.path.expanduser('~/dusk_global_height.json')  # File path for storing data
 
+    # Check if the file exists and read the last known height and timestamp
+    if os.path.exists(data_file):
+        with open(data_file, 'r') as file:
+            data = json.load(file)
+            last_known_height = data.get('height')
+            last_timestamp = datetime.fromisoformat(data.get('timestamp'))
+
+            # If less than an hour has passed, return the saved data
+            if datetime.now() - last_timestamp < timedelta(hours=1):
+                return last_known_height, last_timestamp
+
+    # If more than an hour has passed, or the file doesn't exist, get new data
+    retries = 0
     while retries < max_retries:
         local_height = get_global_height()
         if local_height != -1:
-            last_known_global_height_info = (local_height, datetime.now())
-            return last_known_global_height_info
+            # Save the new height and current timestamp to the file
+            with open(data_file, 'w') as file:
+                current_time = datetime.now()
+                json.dump({'height': local_height, 'timestamp': current_time.isoformat()}, file)
+            return local_height, current_time
         else:
             time.sleep(retry_delay)
-
         retries += 1
 
-    if last_known_global_height_info[0] is not None:
-        return last_known_global_height_info
+    # Return the last known data if available, or None if not
+    if os.path.exists(data_file):
+        with open(data_file, 'r') as file:
+            data = json.load(file)
+            return data.get('height'), datetime.fromisoformat(data.get('timestamp'))
     else:
         return None, datetime.now()
 
@@ -306,8 +323,7 @@ def main():
         print("Your Local Node Block Height:", local_height)
 
         # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 2700: #45 minute timeout
-            global_height, last_global_check = get_global_height_safe()
+        global_height, last_global_check = get_global_height_safe()
 
         if 0: #debug
             global_height = 125000
@@ -360,4 +376,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
