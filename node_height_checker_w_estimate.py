@@ -283,7 +283,7 @@ def main():
         print("Current Local Height:", local_height)
 
         # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 720: #12 minute timeout
+        if (current_time - last_global_check).total_seconds() >= 1500: #25 minute timeout 
             global_height, last_global_check = get_global_height_safe()
 
         # Display global height
