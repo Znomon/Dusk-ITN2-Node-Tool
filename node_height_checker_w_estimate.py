@@ -27,30 +27,24 @@ def count_blocks_mined():
     return num_lines
 
 def count_alive_nodes():
-    # Define the curl command
-    curl_command = [
-        "curl",
-        "--location",
-        "--request", "GET",
-        "'http://127.0.0.1:8080/02/Chain'",
-        "--header", "'Rusk-Version: 0.7'",
-        "--data-raw", "'{\"topic\": \"alive_nodes\", \"data\": \" 100\"}'"
-    ]
+    url = 'http://127.0.0.1:8080/02/Chain'
+    headers = {
+        'Rusk-Version': '0.7',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'topic': 'alive_nodes',
+        'data': ' 100'
+    }
 
-    # Execute the curl command
-    process = subprocess.Popen(curl_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = process.communicate()
-
-    # Return 0 if there's an error
-    if error:
-        return 0
-
-    # Parse the JSON response and return the count of nodes
     try:
-        nodes_list = json.loads(output.decode())
-        return len(nodes_list)
-    except json.JSONDecodeError:
-        return 0
+        response = requests.get(url, headers=headers, json=data)
+        response.raise_for_status()  # This will raise an exception for HTTP error codes
+        node_list = response.json()
+        return len(node_list)
+    except requests.RequestException as e:
+        print(f"Error fetching data: {e}")
+        return -1
 
 def check_consensus_keys_password():
     # Define the number of lines to check at the end of the log file
@@ -120,14 +114,21 @@ def count_block_accepted(log_file_path, intervals):
 
 def dusk_network_connect_status():
     # Run the tail command to get the last 500 lines of the log file
-    tail_process = subprocess.Popen(["tail", "-n", "200", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, _ = tail_process.communicate()
+    #tail_process = subprocess.Popen(["tail", "-n", "200", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    #output, _ = tail_process.communicate()
 
-    # Check for the string "block received" in the output
-    if "block received" in output.decode():
-        status = "Connected: Receiving Blocks"
+    nodes = count_alive_nodes()
+
+    if nodes > 0:
+        status = f"ONLINE - Connected to {nodes} Nodes"
     else:
-        status = "Not Connected: Network Congested or Node Offline. check #announcements on discord"
+        status = "OFFLINE - Check your port forwarding"
+
+    #Check for the string "block received" in the output
+    #if "block received" in output.decode():
+    #    status = "Connected: Receiving Blocks"
+    #else:
+    #    status = "Not Connected: Network Congested or Node Offline. check #announcements on discord"
 
     print(f"DUSK Network Status: {status}")
 
