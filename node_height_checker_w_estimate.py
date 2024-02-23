@@ -46,6 +46,28 @@ def count_alive_nodes():
         print(f"Error fetching data: {e}")
         return -1
 
+def find_most_recent_execution_timestamp():
+    lines_to_read = 8000  # Define how many lines you want to read from the end of the file
+
+    # Command to read the last 'lines_to_read' lines and grep for 'execute_state_transition'
+    command = f"tail -n {lines_to_read} /var/log/rusk.log | grep -i 'execute_state_transition'"
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    output, _ = process.communicate()
+    lines = output.decode().splitlines()
+
+    most_recent_timestamp = None
+
+    # Iterate through each line to find the most recent timestamp
+    for line in lines:
+        line = remove_ansi_codes(line)
+        timestamp = parse_timestamp(line)
+        if timestamp:
+            # Update the most recent timestamp if this timestamp is newer
+            if most_recent_timestamp is None or timestamp > most_recent_timestamp:
+                most_recent_timestamp = timestamp
+
+    return most_recent_timestamp
+
 def check_consensus_keys_password():
     # Define the number of lines to check at the end of the log file
     num_lines_to_check = 2000
@@ -144,14 +166,17 @@ def get_current_local_height():
         return None
 
 def get_global_height():
-    response = requests.get('https://api.dusk.network/v1/stats?node=nodes.dusk.network', timeout=2)
-    data = response.json()
-    # Check if 'lastBlock' key exists in the response
-    if 'lastBlock' in data:
-        return data['lastBlock']
-    else:
-        # Handle the absence of 'lastBlock' key
-        raise KeyError("Key 'lastBlock' not found in the response")
+    try:
+        response = requests.get('https://api.dusk.network/v1/stats?node=nodes.dusk.network', timeout=2)
+        data = response.json()
+        if 'lastBlock' in data:
+            return data['lastBlock']
+        else:
+            # Handle the absence of 'lastBlock' key
+            raise KeyError("Key 'lastBlock' not found in the response")
+    except Exception:
+        # Catch any exception and return -1
+        return -1
 
 def get_local_node_height():
     try:
@@ -168,7 +193,7 @@ def get_local_node_height():
     except Exception:
         return -1
 
-def get_global_height_safe(max_retries=3, retry_delay=2):
+def get_global_height_safe(max_retries=2, retry_delay=2):
     global last_known_global_height_info
     retries = 0
 
@@ -258,7 +283,7 @@ def main():
         print("Current Local Height:", local_height)
 
         # Update and handle global height information
-        if (current_time - last_global_check).total_seconds() >= 600: #10 minute timeout
+        if (current_time - last_global_check).total_seconds() >= 720: #12 minute timeout
             global_height, last_global_check = get_global_height_safe()
 
         # Display global height
@@ -273,7 +298,6 @@ def main():
                 if blocks_behind <= 0:
                     print("Node Status: SYNCED!")
                     # Display blocks mined
-                    print("Blocks Mined:", count_blocks_mined())
                     break
                 blocks_per_interval = calculate_block_increase(local_heights, interval, local_height)
                 if blocks_per_interval > 0:
@@ -283,6 +307,16 @@ def main():
                     break
         else:
             print("Estimated Global Height: Unavailable")
+
+        execute_state_transition_timestamp = find_most_recent_execution_timestamp()
+        if execute_state_transition_timestamp:
+            current_time = datetime.now(timezone.utc)
+            time_diff = current_time - execute_state_transition_timestamp
+            human_readable_time = format_timedelta(time_diff)
+            print(f"Recently Mined Blocks: {count_blocks_mined()} (Last mined {human_readable_time} ago) ")
+        else:
+            print(f"Recently Mined Blocks: {count_blocks_mined()}")
+
 
         dusk_network_connect_status()
 
