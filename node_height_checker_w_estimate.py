@@ -26,6 +26,30 @@ def count_blocks_mined():
 
     return num_lines
 
+def print_stack_backtrace_from_log():
+    try:
+        # Define the commands to be executed
+        tail_command = ["tail", "-n", "1000", "/var/log/rusk.log"]
+        grep_command = ["grep", "-B", "4", "-A", "1", "stack backtrace"]
+
+        # Execute the tail command
+        tail_process = subprocess.Popen(tail_command, stdout=subprocess.PIPE, text=True)
+        # Pipe the output of tail to grep
+        grep_process = subprocess.Popen(grep_command, stdin=tail_process.stdout, stdout=subprocess.PIPE, text=True)
+        tail_process.stdout.close()  # Allow tail_process to receive a SIGPIPE if grep_process exits
+
+        # Get the output from grep
+        output, errors = grep_process.communicate()
+
+        # Split the output into lines
+        output_lines = output.split('\n')
+
+        # Check if the output contains more than one line
+        if len(output_lines) > 1:
+            print("Your node has recently crashed for some reason or another. Copy this below output and search the discord for solutions.")
+            print(output)
+            
+
 def count_alive_nodes():
     url = 'http://127.0.0.1:8080/02/Chain'
     headers = {
@@ -298,6 +322,7 @@ def main():
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
     check_consensus_keys_password()
+    
     # Get initial local height
     local_height = get_current_local_height()
     if local_height is None:
