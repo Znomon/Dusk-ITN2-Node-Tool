@@ -297,7 +297,7 @@ def main():
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
     last_interval_check = {interval: datetime.now() for interval in intervals}
-
+    check_consensus_keys_password()
     # Get initial local height
     local_height = get_current_local_height()
     if local_height is None:
@@ -305,8 +305,7 @@ def main():
         return
 
     global_height, last_global_check = get_global_height_safe()
-    check_consensus_keys_password()
-
+    
     while True:
         current_time = datetime.now()
         clear_terminal()
