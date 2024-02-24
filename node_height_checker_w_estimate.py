@@ -101,7 +101,7 @@ def check_consensus_keys_password():
 
     # Check for the specific error message in the log data
     if "Invalid consensus keys password: BlockModeError" in log_data:
-        print("ERROR: Invalid consensus keys password detected. Please ensure you have entered the correct password. Refer to the steps on the website (https://docs.dusk.network/itn/node-running-guide/) for guidance.")
+        print("ERROR: Invalid consensus keys password detected. Please ensure you enter same password you created. Refer to the steps on the website (https://docs.dusk.network/itn/node-running-guide/) for guidance.")
 
 def estimate_catch_up_time(global_height, local_height, log_file_path, intervals):
     block_accepted_counts, oldest_timestamp = count_block_accepted(log_file_path, intervals)
