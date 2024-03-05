@@ -22,21 +22,26 @@ def count_blocks_mined():
     # Count the number of lines returned by the grep command
     num_lines = len(output.decode().split('\n')) - 1
 
-    # Check if the current log file has no instances and if we have already run zgrep recently
-    if 'last_zgrep_run' in blocks_mined_data and (time.time() - blocks_mined_data['last_zgrep_run']) < 1800:
-        num_compressed_logs_blocks = blocks_mined_data.get('num_compressed_logs_blocks', 0)
-    else:
-        # Run the zgrep command
-        zgrep_output = subprocess.check_output("zgrep 'execute_state_transition' /var/log/rusk.log*.gz -c", shell=True).decode()
-        # Parse the output and sum the counts
-        num_compressed_logs_blocks = sum(int(line.split(':')[-1]) for line in zgrep_output.strip().split('\n') if line)
+    try:
+        # Check if the current log file has no instances and if we have already run zgrep recently
+        if 'last_zgrep_run' in blocks_mined_data and (time.time() - blocks_mined_data['last_zgrep_run']) < 1800:
+            num_compressed_logs_blocks = blocks_mined_data.get('num_compressed_logs_blocks', 0)
+        else:
+            # Run the zgrep command
+            zgrep_output = subprocess.check_output("zgrep 'execute_state_transition' /var/log/rusk.log*.gz -c", shell=True).decode()
+            # Parse the output and sum the counts
+            num_compressed_logs_blocks = sum(int(line.split(':')[-1]) for line in zgrep_output.strip().split('\n') if line)
 
-        # Update the blocks_mined_data
-        blocks_mined_data['num_compressed_logs_blocks'] = num_compressed_logs_blocks
-        blocks_mined_data['last_zgrep_run'] = time.time()
-        existing_data['blocks_mined_count_data'] = blocks_mined_data
+            # Update the blocks_mined_data
+            blocks_mined_data['num_compressed_logs_blocks'] = num_compressed_logs_blocks
+            blocks_mined_data['last_zgrep_run'] = time.time()
+            existing_data['blocks_mined_count_data'] = blocks_mined_data
 
-        write_json_file(json_file_path, existing_data)
+            write_json_file(json_file_path, existing_data)
+    except Exception:
+        num_compressed_logs_blocks = 0
+
+
 
     # Update the last count value
     count_blocks_mined.last_count = num_lines
