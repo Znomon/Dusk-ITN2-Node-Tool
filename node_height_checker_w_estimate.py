@@ -339,6 +339,7 @@ def localNodeErrorMsg():
      print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
 
 def main():
+    version = "8.1"
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
@@ -355,7 +356,7 @@ def main():
     while True:
         current_time = datetime.now()
         clear_terminal()
-        print("-----------------------------")
+        print(f"----Dusk Node Toolkit v{version}----")
 
         # Update local height
         local_height = get_current_local_height()
@@ -405,14 +406,14 @@ def main():
             print(f"Total Blocks Mined: {mined_blocks_count} (Last mined {human_readable_time} ago)")
         else:
             if local_height >= global_height:
-                print(f"Total Blocks Mined: {mined_blocks_count} This is okay, You are synced. Just need to wait")
+                print(f"Total Blocks Mined: {mined_blocks_count} (This is okay, node is synced. Just wait)")
             else:
                 print(f"Total Blocks Mined: Pending SYNCED status.")
 
 
         dusk_network_connect_status()
 
-        print("-----------------------------")
+        print("------------------------------")
 
         # Display block accepted information
         block_accepted_counts = count_block_accepted(log_file_path, intervals)[0]
