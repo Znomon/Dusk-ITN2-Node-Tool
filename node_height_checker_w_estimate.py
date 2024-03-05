@@ -9,6 +9,12 @@ import os
 last_known_global_height_info = (None, datetime.min)
 
 def count_blocks_mined():
+    json_file_path = 'dusk_global_height.json'
+
+    # Read the existing data
+    existing_data = read_json_file(json_file_path)
+    blocks_mined_data = existing_data.get('blocks_mined_count_data', {})
+
     # Run the grep command and capture its output
     grep_process = subprocess.Popen(["grep", "execute_state_transition", "/var/log/rusk.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, _ = grep_process.communicate()
@@ -16,15 +22,40 @@ def count_blocks_mined():
     # Count the number of lines returned by the grep command
     num_lines = len(output.decode().split('\n')) - 1
 
-    # Check if the number of lines increased since the last call
-    if hasattr(count_blocks_mined, 'last_count'):
-        if num_lines > count_blocks_mined.last_count:
-            print("####### BLOCK MINED! #######")
+    # Check if the current log file has no instances and if we have already run zgrep recently
+    if 'last_zgrep_run' in blocks_mined_data and (time.time() - blocks_mined_data['last_zgrep_run']) < 1800:
+        num_compressed_logs_blocks = blocks_mined_data.get('num_compressed_logs_blocks', 0)
+    else:
+        # Run the zgrep command
+        zgrep_output = subprocess.check_output("zgrep 'execute_state_transition' /var/log/rusk.log*.gz -c", shell=True).decode()
+        # Parse the output and sum the counts
+        num_compressed_logs_blocks = sum(int(line.split(':')[-1]) for line in zgrep_output.strip().split('\n') if line)
+
+        # Update the blocks_mined_data
+        blocks_mined_data['num_compressed_logs_blocks'] = num_compressed_logs_blocks
+        blocks_mined_data['last_zgrep_run'] = time.time()
+        existing_data['blocks_mined_count_data'] = blocks_mined_data
+
+        write_json_file(json_file_path, existing_data)
 
     # Update the last count value
     count_blocks_mined.last_count = num_lines
 
-    return num_lines
+    return num_compressed_logs_blocks + num_lines
+
+# Function to read data from the JSON file
+def read_json_file(json_file_path):
+    if os.path.exists(json_file_path):
+        with open(json_file_path, 'r') as file:
+            return json.load(file)
+    else:
+        return {}
+
+# Function to write data to the JSON file
+def write_json_file(json_file_path, data):
+    with open(json_file_path, 'w') as file:
+        json.dump(data, file)
+
 
 def count_alive_nodes():
     url = 'http://127.0.0.1:8080/02/Chain'
@@ -69,13 +100,15 @@ def find_most_recent_execution_timestamp():
 def count_mined_blocks_and_get_last_timestamp(log_file_path):
     search_string = "execute_state_transition"
 
+    # Call count_blocks_mined to get the count of mined blocks
+    mined_blocks_count = count_blocks_mined()
+
     # Command to grep for 'execute_state_transition' in the entire log file
     command = f"grep -i '{search_string}' {log_file_path}"
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     output, _ = process.communicate()
     lines = output.decode().splitlines()
 
-    num_lines = len(lines)
     most_recent_timestamp = None
 
     # Iterate through each line to find the most recent timestamp
@@ -86,7 +119,8 @@ def count_mined_blocks_and_get_last_timestamp(log_file_path):
             most_recent_timestamp = timestamp
 
     # Return the count of mined blocks and the most recent timestamp
-    return num_lines, most_recent_timestamp
+    # Here, we use the count from count_blocks_mined
+    return mined_blocks_count, most_recent_timestamp
 
 def check_consensus_keys_password():
     # Define the number of lines to check at the end of the log file
@@ -201,13 +235,13 @@ def get_current_local_height():
 
 def get_global_height():
     try:
-        response = requests.get('https://api.dusk.network/v1/stats?node=nodes.dusk.network', timeout=2)
-        data = response.json()
-        if 'lastBlock' in data:
-            return data['lastBlock']
+        response = requests.get('https://api.dusk.network/v1/blocks?node=nodes.dusk.network', timeout=2)
+        data = response.json()['data']['blocks'][0]['header']
+        if 'height' in data:
+            return data['height']
         else:
             # Handle the absence of 'lastBlock' key
-            raise KeyError("Key 'lastBlock' not found in the response")
+            raise KeyError("Global Key 'height' not found in the response")
     except Exception:
         # Catch any exception and return -1
         return -1
@@ -230,36 +264,43 @@ def get_local_node_height():
 def get_global_height_safe(max_retries=2, retry_delay=2):
     data_file = os.path.expanduser('~/dusk_global_height.json')  # File path for storing data
 
-    # Check if the file exists and read the last known height and timestamp
+    # Read the existing data
     if os.path.exists(data_file):
         with open(data_file, 'r') as file:
             data = json.load(file)
-            last_known_height = data.get('height')
-            last_timestamp = datetime.fromisoformat(data.get('timestamp'))
+    else:
+        data = {}
 
-            # If less than an hour has passed, return the saved data
-            if datetime.now() - last_timestamp < timedelta(hours=1):
-                return last_known_height, last_timestamp
+    global_height_data = data.get('global_height', {})
+
+    # Check the last known height and timestamp
+    last_known_height = global_height_data.get('height')
+    last_timestamp_str = global_height_data.get('timestamp')
+    last_timestamp = datetime.fromisoformat(last_timestamp_str) if last_timestamp_str else None
+
+    # If less than an hour has passed, return the saved data
+    if last_timestamp and (datetime.now() - last_timestamp < timedelta(hours=1)):
+        return last_known_height, last_timestamp
 
     # If more than an hour has passed, or the file doesn't exist, get new data
     retries = 0
     while retries < max_retries:
-        local_height = get_global_height()
+        local_height = get_global_height()  # Assuming this function is defined elsewhere
         if local_height != -1:
             # Save the new height and current timestamp to the file
+            current_time = datetime.now()
+            global_height_data = {'height': local_height, 'timestamp': current_time.isoformat()}
+            data['global_height'] = global_height_data
             with open(data_file, 'w') as file:
-                current_time = datetime.now()
-                json.dump({'height': local_height, 'timestamp': current_time.isoformat()}, file)
+                json.dump(data, file, indent=4)
             return local_height, current_time
         else:
             time.sleep(retry_delay)
         retries += 1
 
     # Return the last known data if available, or None if not
-    if os.path.exists(data_file):
-        with open(data_file, 'r') as file:
-            data = json.load(file)
-            return data.get('height'), datetime.fromisoformat(data.get('timestamp'))
+    if last_known_height and last_timestamp:
+        return last_known_height, last_timestamp
     else:
         return None, datetime.now()
 
@@ -305,7 +346,7 @@ def main():
         return
 
     global_height, last_global_check = get_global_height_safe()
-    
+
     while True:
         current_time = datetime.now()
         clear_terminal()
@@ -356,9 +397,12 @@ def main():
 
             time_diff = log_current_time - last_mined_timestamp
             human_readable_time = format_timedelta(time_diff)
-            print(f"Recently Mined Blocks: {mined_blocks_count} (Last mined {human_readable_time} ago)")
+            print(f"Total Blocks Mined: {mined_blocks_count} (Last mined {human_readable_time} ago)")
         else:
-            print(f"Recently Mined Blocks: {mined_blocks_count} (none within the last 24 hours)")
+            if local_height >= global_height:
+                print(f"Total Blocks Mined: {mined_blocks_count} This is okay, You are synced. Just need to wait")
+            else:
+                print(f"Total Blocks Mined: Pending SYNCED status.")
 
 
         dusk_network_connect_status()
