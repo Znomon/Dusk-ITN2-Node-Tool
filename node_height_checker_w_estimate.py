@@ -379,8 +379,10 @@ def main():
             age = datetime.now() - last_global_check
             age_text = "Now" if age.total_seconds() < 1 else format_timedelta(age)
             print(f"Estimated Global Block Height: {global_height} (Age: {age_text})")
-
+        else:
+            print("Estimated Global Block Height: Unavailable at this time")
             # Determine node status: SYNCED or SYNCING
+        if global_height is not None:
             if local_height >= global_height:
                 print("Node Status: SYNCED!")
             else:
@@ -388,8 +390,9 @@ def main():
                 estimated_catch_up_time = estimate_catch_up_time(global_height, local_height, log_file_path, intervals)
                 if estimated_catch_up_time:
                     print(f"Node Status: Syncing. (ETA to Global: {estimated_catch_up_time})")
-        else:
-            print("Estimated Global Block Height: Unavailable at this time")
+                else:
+                    print("Node Status: Syncing...")
+        
 
         # Create a separate UTC current time variable for log file processing
         log_current_time = datetime.now(timezone.utc)
@@ -403,13 +406,10 @@ def main():
 
             time_diff = log_current_time - last_mined_timestamp
             human_readable_time = format_timedelta(time_diff)
-            print(f"Total Blocks Mined: {mined_blocks_count} (Last mined {human_readable_time} ago)")
+            print(f"Blocks Mined past 10 days: {mined_blocks_count} (Last mined {human_readable_time} ago)")
         else:
-            if local_height >= global_height:
-                print(f"Total Blocks Mined: {mined_blocks_count} (This is okay, node is synced. Just wait)")
-            else:
-                print(f"Total Blocks Mined: Pending SYNCED status.")
-
+            print(f"Blocks Mined past 10 days: {mined_blocks_count}")
+            
 
         dusk_network_connect_status()
 
