@@ -339,7 +339,7 @@ def localNodeErrorMsg():
      print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
 
 def main():
-    version = "8.1"
+    version = "8.2"
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
