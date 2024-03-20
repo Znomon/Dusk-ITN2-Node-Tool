@@ -26,7 +26,14 @@ def get_ruskquery_version():
         command = "ruskquery version"
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         output, _ = process.communicate()
-        return output.decode().strip()
+        output_str = output.decode().strip()
+        if "null" in output_str:
+            lines = output_str.split('\n')
+            for line in lines:
+                if "You are currently on version:" in line:
+                    return "You are using the latest installer version: " + line.split(":")[1].strip()
+        else:
+            return output_str
     except Exception:
         pass
 
@@ -362,7 +369,7 @@ def localNodeErrorMsg():
      print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
 
 def main():
-    version = "0.8.4"
+    version = "0.8.5"
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
@@ -378,6 +385,8 @@ def main():
 
     while True:
         current_time = datetime.now()
+        # Function takes a second or two. moving this to the top to avoid the lag in the middle of the output execution.
+        mined_blocks_count, last_mined_timestamp = count_mined_blocks_and_get_last_timestamp(log_file_path)
         clear_terminal()
         print(f"---Dusk Node Toolkit v{version}---")
 
@@ -421,7 +430,6 @@ def main():
         log_current_time = datetime.now(timezone.utc)
 
         # Display information about recently mined blocks
-        mined_blocks_count, last_mined_timestamp = count_mined_blocks_and_get_last_timestamp(log_file_path)
         if last_mined_timestamp:
             # Ensure last_mined_timestamp is timezone-aware in UTC
             if last_mined_timestamp.tzinfo is None:
@@ -433,6 +441,7 @@ def main():
         else:
             print(f"Blocks Mined past 10 days: {mined_blocks_count}")
             
+        
         print("------------------------------")
         dusk_network_connect_status()
         # Call the function to get the ruskquery version
