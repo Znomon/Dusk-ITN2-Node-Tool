@@ -9,6 +9,18 @@ import subprocess
 
 last_known_global_height_info = (None, datetime.min)
 
+
+def get_rusk_version():
+    try:
+        command = "ruskquery info"
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        output, _ = process.communicate()
+        version_info = json.loads(output.decode())
+        version_build = version_info.get("version_build")
+        print(f"Rusk Version Build: {version_build}")
+    except Exception:
+        pass
+
 def get_ruskquery_version():
     try:
         command = "ruskquery version"
@@ -350,7 +362,7 @@ def localNodeErrorMsg():
      print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
 
 def main():
-    version = "0.8.3"
+    version = "0.8.4"
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
@@ -424,8 +436,8 @@ def main():
 
         dusk_network_connect_status()
         # Call the function to get the ruskquery version
-        ruskquery_version = get_ruskquery_version()
-        print(ruskquery_version)
+        print(get_ruskquery_version())
+        get_rusk_version()
 
         print("------------------------------")
 
