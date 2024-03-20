@@ -34,8 +34,12 @@ Blocks 'accepted' in the last 15 minutes: 103
 if you see this error ```ModuleNotFoundError: No module named 'requests'``` Run this: ```sudo apt-get update
 sudo apt-get install python3-requests```
 
-UPDATE 8: Changed API call per Dev's request. 
-Added a check for archived log files. 
+### Analytics Opt Out:
+As of v0.8.6 this tool will send a hashed version of your node's kadcast address and nothing else, Just so I have an idea of how many people are using the tool.
+I understand if you don't like this, here is how to opt-out: 
+edit this file: ~/dusk_global_height.json
+Change "analytics": 1 to "analytics": 0
+save the file.
 
 -----------------------------------------------------
 ALWAYS be aware of people trying to scam you in crypto. 
