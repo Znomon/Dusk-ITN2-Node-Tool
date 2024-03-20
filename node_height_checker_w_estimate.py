@@ -6,9 +6,26 @@ import json
 import re
 import os
 import subprocess
+import requests
+import hashlib
 
 last_known_global_height_info = (None, datetime.min)
 
+def check_analytics_approval():
+    json_file_path = 'dusk_global_height.json'
+
+    # Read the existing data
+    existing_data = read_json_file(json_file_path)
+
+    # Check if 'analytics' key exists
+    if 'analytics' not in existing_data:
+        # Add 'analytics' key and set it to 1
+        existing_data['analytics'] = 1
+        write_json_file(json_file_path, existing_data)
+        return False
+    else:
+        # Return True or False based on the 'analytics' value
+        return existing_data['analytics'] == 1
 
 def get_rusk_version():
     try:
@@ -193,6 +210,38 @@ def estimate_catch_up_time(global_height, local_height, log_file_path, intervals
 
     return format_timedelta(catch_up_time)
 
+def heartbeat(unique_identifier, action):
+    randomNum = str(int(time.time()))
+    unique_identifier = str(unique_identifier)
+    action = str(action)
+    
+    url = f"https://interstellarhippy.matomo.cloud/matomo.php?idsite=1&rec=1"
+    url += f"&action_name={action}"
+    url += f"&_id={unique_identifier}&rand={randomNum}"
+    
+    current_time = time.time()
+    last_post_time = getattr(heartbeat, 'last_post_time', 0)
+    post_interval = 900  # 15 minutes in seconds
+    
+    if current_time - last_post_time >= post_interval:
+        try:
+            response = requests.post(url)
+            heartbeat.last_post_time = current_time
+        except Exception:
+            pass
+
+def get_id_info():
+    try:
+        #grab the kadcast address since this should be unique to each node. However it will be hashed to anonymize the data
+        command = "ruskquery info | jq '.kadcast_address'"
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        output, _ = process.communicate()
+        # hash the response to anonaize the data
+        hashed_output = hashlib.sha256(output.strip()).hexdigest()
+        return str(hashed_output)
+    except Exception:
+        pass
+
 def remove_ansi_codes(text):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
     return ansi_escape.sub('', text)
@@ -369,10 +418,11 @@ def localNodeErrorMsg():
      print("LOCAL NODE UNREACHABLE. Service is either not running or firewall rules are broken \nCheck the support-forum or #faq on the Discord Server")
 
 def main():
-    version = "0.8.5"
+    version = "0.8.6"
     log_file_path = '/var/log/rusk.log'
     intervals = [1, 5, 15]  # Minutes
     local_heights = {interval: [] for interval in intervals}
+    syncStatus = "Unknown"
     last_interval_check = {interval: datetime.now() for interval in intervals}
     check_consensus_keys_password()
     # Get initial local height
@@ -416,14 +466,18 @@ def main():
             # Determine node status: SYNCED or SYNCING
         if global_height is not None:
             if local_height >= global_height:
+                syncStatus = "SYNCED"
                 print("Node Status: SYNCED!")
             else:
+                syncStatus = "Syncing..."
                 # Calculate estimated catch-up time using count_block_accepted
                 estimated_catch_up_time = estimate_catch_up_time(global_height, local_height, log_file_path, intervals)
                 if estimated_catch_up_time:
                     print(f"Node Status: Syncing. (ETA to Global: {estimated_catch_up_time})")
                 else:
                     print("Node Status: Syncing...")
+        else:
+            syncStatus = "Unknown"
         
 
         # Create a separate UTC current time variable for log file processing
@@ -456,6 +510,8 @@ def main():
             print(f"Blocks 'accepted' in the last {interval} minutes: {block_accepted_counts[interval]}")
 
         print("\nPress Ctrl+C to kill")
+        if(check_analytics_approval()): #check if user allows analytics 
+           heartbeat(get_id_info(),"heartbeat")
         time.sleep(10)  # Wait for 10 seconds before next check
 
 if __name__ == "__main__":
