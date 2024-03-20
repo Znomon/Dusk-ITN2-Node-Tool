@@ -433,7 +433,7 @@ def main():
         else:
             print(f"Blocks Mined past 10 days: {mined_blocks_count}")
             
-
+        print("------------------------------")
         dusk_network_connect_status()
         # Call the function to get the ruskquery version
         print(get_ruskquery_version())
